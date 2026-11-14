@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>IPMAT & DESIGN PAYALUGA</title>
+<style>
+body{margin:0;font:16px system-ui;background:#f3f6fb;color:#17233b}header{background:#14213d;color:white;padding:25px}main{max-width:950px;margin:22px auto;padding:0 14px}.card{background:white;border:1px solid #e0e6f0;border-radius:14px;padding:18px;margin:14px 0}input,textarea,button{font:inherit;padding:10px;border-radius:8px;border:1px solid #cbd5e1}input,textarea{display:block;width:100%;box-sizing:border-box;margin:6px 0 12px}textarea{min-height:75px}button{background:#2457c5;color:white;border:0;cursor:pointer;margin:4px}button.alt{background:#e8eef9;color:#17233b}.hidden{display:none}.muted{color:#65738a;font-size:.9rem}.item{border:1px solid #e5eaf2;border-radius:9px;padding:12px;margin:9px 0}.msg{padding:10px;background:#edf3ff;border-radius:8px;margin:10px 0}.error{background:#ffeded;color:#8b1e2a}.tabs{display:flex;gap:6px;flex-wrap:wrap}h1{margin:0}h2{margin-top:0}
+</style></head><body>
+<header><h1>IPMAT &amp; DESIGN PAYALUGA</h1><p>A private student community to learn, share updates and ask questions.</p></header>
+<main>
+<div id="notice" class="msg error hidden">Add your Supabase Project URL and Publishable key in config.js.</div><div id="status" class="msg hidden"></div>
+<section id="auth" class="card">
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:20px">
+<div><h2>Student login</h2><form id="login"><label>Email</label><input id="le" type="email" required><label>Password</label><input id="lp" type="password" required><button>Log in</button></form></div>
+<div><h2>Register</h2><form id="signup"><label>Display name</label><input id="sn" maxlength="50" required><label>Email</label><input id="se" type="email" required><label>Password (8+ characters)</label><input id="sp" type="password" minlength="8" required><button>Create account</button></form><p class="muted">New accounts need admin approval before accessing the community.</p></div>
+</div></section>
+<section id="pending" class="card hidden"><h2>Waiting for admin approval</h2><p>Your account is registered. An admin must approve it before you can enter.</p><button id="logoutPending" class="alt">Log out</button></section>
+<section id="community" class="hidden">
+<div class="card"><span id="welcome"></span><button id="logout" class="alt" style="float:right">Log out</button></div>
+<div class="tabs"><button data-tab="news">News</button><button data-tab="qa">Questions &amp; answers</button><button data-tab="chat">Group chat</button><button id="adminButton" data-tab="admin" class="hidden">Admin approvals</button></div>
+<section id="news" class="card"><h2>News &amp; updates</h2><form id="newsForm" class="hidden"><input id="nt" placeholder="Update title" maxlength="140" required><textarea id="nb" placeholder="Write an update" maxlength="4000" required></textarea><button>Publish</button></form><div id="newsList"></div></section>
+<section id="qa" class="card hidden"><h2>Ask a question</h2><form id="ask"><textarea id="question" maxlength="2500" required placeholder="Type your question"></textarea><button>Post question</button></form><div id="qaList"></div></section>
+<section id="chat" class="card hidden"><h2>Student group chat</h2><p class="muted">Do not share passwords, phone numbers, addresses, or other private information.</p><form id="sendChat"><input id="chatText" maxlength="800" required placeholder="Write a message"><button>Send</button></form><div id="chatList"></div><button id="refresh" class="alt">Refresh messages</button></section>
+<section id="admin" class="card hidden"><h2>Pending student accounts</h2><div id="pendingList"></div></section>
+</section></main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="config.js"></script>
+<script>
+(()=>{const cfg=window.PAYALUGA_CONFIG||{},$=id=>document.getElementById(id);let db,user,profile;
+const show=(id,on)=>$(id).classList.toggle('hidden',!on);
+function say(t,err=false){$('status').textContent=t;$('status').className='msg'+(err?' error':'');show('status',true)}
+function node(parent,tag,txt,cls='item'){let n=document.createElement(tag);n.textContent=txt;if(cls)n.className=cls;parent.append(n);return n}
+function date(t){return new Date(t).toLocaleString()}
+function loggedOut(){show('auth',true);show('pending',false);show('community',false)}
+async function profileLoad(){let r=await db.from('profiles').select('*').eq('id',user.id).single();if(r.error)return say(r.error.message,true);profile=r.data;
+show('auth',false);show('pending',profile.status!=='approved');show('community',profile.status==='approved');
+if(profile.status==='approved'){$('welcome').textContent='Welcome, '+profile.display_name+' ('+profile.role+')';show('adminButton',profile.role==='admin');show('newsForm',profile.role==='admin');newsLoad();qaLoad();chatLoad()}}
+async function newsLoad(){let box=$('newsList');box.replaceChildren();let r=await db.from('news').select('*').order('created_at',{ascending:false}).limit(40);if(r.error)return node(box,'p',r.error.message);if(!r.data.length)node(box,'p','No updates yet.','muted');r.data.forEach(x=>{let a=node(box,'article','');node(a,'h3',x.title,'');node(a,'p',x.content,'');node(a,'small',date(x.created_at),'muted')})}
+async function qaLoad(){let box=$('qaList');box.replaceChildren();let r=await db.from('questions').select('*').order('created_at',{ascending:false}).limit(40);if(r.error)return node(box,'p',r.error.message);if(!r.data.length)node(box,'p','No questions yet.','muted');for(let q of r.data){let a=node(box,'article','');node(a,'b',q.question,'');node(a,'small',date(q.created_at),'muted');let ar=await db.from('answers').select('*').eq('question_id',q.id).order('created_at');(ar.data||[]).forEach(x=>node(a,'p','↳ '+x.answer,''));let f=document.createElement('form'),i=document.createElement('input'),b=document.createElement('button');i.placeholder='Write an answer';i.required=true;i.maxLength=1500;b.textContent='Answer';f.append(i,b);a.append(f);f.onsubmit=async e=>{e.preventDefault();let z=await db.from('answers').insert({question_id:q.id,user_id:user.id,answer:i.value.trim()});if(z.error)say(z.error.message,true);else{say('Answer posted.');qaLoad()}}}}
+async function chatLoad(){let box=$('chatList');box.replaceChildren();let r=await db.from('chat_messages').select('*').order('created_at').limit(80);if(r.error)return node(box,'p',r.error.message);if(!r.data.length)node(box,'p','No messages yet.','muted');r.data.forEach(x=>{let a=node(box,'div',x.message);node(a,'small',date(x.created_at),'muted')})}
+async function pendingLoad(){let box=$('pendingList');box.replaceChildren();let r=await db.from('profiles').select('id,display_name,created_at').eq('status','pending').order('created_at');if(r.error)return node(box,'p',r.error.message);if(!r.data.length)node(box,'p','No pending accounts.','muted');r.data.forEach(p=>{let a=node(box,'div',p.display_name+' • '+date(p.created_at));['approved','rejected'].forEach(s=>{let b=document.createElement('button');b.textContent=s==='approved'?'Approve':'Reject';b.onclick=async()=>{let z=await db.from('profiles').update({status:s}).eq('id',p.id);if(z.error)say(z.error.message,true);else{say('Account '+s+'.');pendingLoad()}};a.append(b)})})}
+function tab(t){['news','qa','chat','admin'].forEach(x=>show(x,x===t));if(t==='admin')pendingLoad();if(t==='chat')chatLoad()}
+if(!cfg.url||!cfg.anonKey||!window.supabase){show('notice',true);return}
+db=window.supabase.createClient(cfg.url,cfg.anonKey);
+$('signup').onsubmit=async e=>{e.preventDefault();let r=await db.auth.signUp({email:$('se').value.trim(),password:$('sp').value,options:{data:{display_name:$('sn').value.trim()}}});if(r.error)say(r.error.message,true);else say('Registration submitted. Verify your email if requested, then wait for admin approval.');e.target.reset()};
+$('login').onsubmit=async e=>{e.preventDefault();let r=await db.auth.signInWithPassword({email:$('le').value.trim(),password:$('lp').value});if(r.error)say(r.error.message,true);else{user=r.data.user;await profileLoad()}};
+async function logout(){await db.auth.signOut();loggedOut()}$('logout').onclick=logout;$('logoutPending').onclick=logout;
+$('newsForm').onsubmit=async e=>{e.preventDefault();let r=await db.from('news').insert({title:$('nt').value.trim(),content:$('nb').value.trim(),author_id:user.id});if(r.error)say(r.error.message,true);else{say('Update published.');e.target.reset();newsLoad()}};
+$('ask').onsubmit=async e=>{e.preventDefault();let r=await db.from('questions').insert({question:$('question').value.trim(),user_id:user.id});if(r.error)say(r.error.message,true);else{say('Question posted.');e.target.reset();qaLoad()}};
+$('sendChat').onsubmit=async e=>{e.preventDefault();let r=await db.from('chat_messages').insert({message:$('chatText').value.trim(),user_id:user.id});if(r.error)say(r.error.message,true);else{$('chatText').value='';chatLoad()}};
+$('refresh').onclick=chatLoad;document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>tab(b.dataset.tab));
+db.auth.getSession().then(async r=>{if(r.data.session){user=r.data.session.user;await profileLoad()}else loggedOut()});
+})();
+</script></body></html>
